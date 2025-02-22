@@ -108,7 +108,7 @@ services:
       - nginx
       - prometheus
     command:
-      - --nginx.scrape-uri=https://nginx:8080/stub_status
+      - --nginx.scrape-uri=http://nginx:8080/stub_status
     networks:
       - monitoring
     ports:

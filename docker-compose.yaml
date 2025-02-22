@@ -1,7 +1,6 @@
 name: docker-starter
 
 services:
-  #Database
   postgres:
     container_name: postgres
     image: postgres:17.3
@@ -10,12 +9,12 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PW}
       - POSTGRES_DB=${POSTGRES_DB} #optional (specify default database instead of $POSTGRES_DB)
     ports:
-      - "5432:5432"
+      - '5432:5432'
     restart: unless-stopped
     volumes:
-      - postgres-data:/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready  -U ${POSTGRES_USER}"]
+      test: ['CMD-SHELL', 'pg_isready  -U ${POSTGRES_USER}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,20 +27,17 @@ services:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_MAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PW}
     ports:
-      - "5050:80"
+      - '5050:80'
     restart: unless-stopped
     volumes:
       - pgadmin-data:/var/lib/pgadmin
-
   postgres-exporter:
     container_name: postgres-exporter
     image: prometheuscommunity/postgres-exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PW}@postgres:5432/shop?sslmode=disable"
+      DATA_SOURCE_NAME: 'postgresql://${POSTGRES_USER}:${POSTGRES_PW}@postgres:5432/${POSTGRES_DB}?sslmode=disable'
     networks:
       - monitoring
-
-  #Monitoring
   prometheus:
     image: prom/prometheus
     container_name: prometheus
@@ -54,10 +50,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./prometheus:/etc/prometheus
-      - prom_data:/prometheus
+      - prometheus-data:/prometheus
     networks:
       - monitoring
-
   grafana:
     image: grafana/grafana
     container_name: grafana
@@ -68,7 +63,49 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=grafana
     volumes:
-      - ./grafana:/etc/grafana/provisioning/datasources
+      - ./grafana-provisioning:/etc/grafana/provisioning/
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring
+  cadvisor:
+    image: google/cadvisor:latest
+    container_name: monitoring_cadvisor
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring
+
+  app:
+    build:
+      context: ./demo-app
+      dockerfile: Dockerfile
+    deploy:
+      replicas: 3
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    depends_on:
+      - app
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - monitoring
+
+  nginx-prometheus-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: prometheus-nginx-exporter
+    restart: always
+    depends_on:
+      - nginx
+      - prometheus
+    command:
+      - -nginx.scrape-uri=https://nginx:8080/stub_status
     networks:
       - monitoring
 
@@ -78,4 +115,5 @@ networks:
 volumes:
   postgres-data:
   pgadmin-data:
-  prom_data:
+  prometheus-data:
+  grafana-data:
